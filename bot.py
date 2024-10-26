@@ -22,13 +22,6 @@ URL_QUIZ_LIST = os.getenv('URL_QUIZ_LIST')
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-embeddings = Embeddings()
-embeddings.load('src/embeddings/english')
-
-def get_similar_words(word):
-    words = [result['text'].capitalize() for result in embeddings.search(word, 5)]
-    return words
-
 def free_dictionary_api(word):
     url = f'https://api.dictionaryapi.dev/api/v2/entries/en_US/{word}'
     response = requests.get(url)
@@ -116,7 +109,7 @@ async def inline_query(update: Update, context: CallbackContext) -> None:
         #TODO return webInfoApp to the group
     # WORD
     elif query.isalpha():
-        queries = get_similar_words(query)
+        queries = []
         if query in queries: queries.remove(query)
 
         queries.insert(0, query)
