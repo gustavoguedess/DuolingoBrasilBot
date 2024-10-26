@@ -6,7 +6,6 @@ from telegram.constants import ParseMode
 
 from uuid import uuid4 as uuid
 from urllib.parse import quote_plus
-from txtai import Embeddings
 
 import logging
 from dotenv import load_dotenv
