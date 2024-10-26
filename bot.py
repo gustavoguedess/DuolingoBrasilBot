@@ -1,6 +1,8 @@
 from telegram import Update, WebAppInfo
 from telegram import InlineQueryResultArticle, InputTextMessageContent, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, InlineQueryHandler, CallbackContext
+from telegram.ext import Application, InlineQueryHandler, CallbackContext, CommandHandler
+from telegram.constants import ParseMode
+
 
 from uuid import uuid4 as uuid
 from urllib.parse import quote_plus
@@ -8,11 +10,13 @@ from txtai import Embeddings
 
 import logging
 from dotenv import load_dotenv
+import pandas as pd
 import os
 import requests
 
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+URL_QUIZ_LIST = os.getenv('URL_QUIZ_LIST')
 
 # Enable logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -22,7 +26,7 @@ embeddings = Embeddings()
 embeddings.load('src/embeddings/english')
 
 def get_similar_words(word):
-    words = [result['text'] for result in embeddings.search(word, 5)]
+    words = [result['text'].capitalize() for result in embeddings.search(word, 5)]
     return words
 
 def free_dictionary_api(word):
@@ -49,10 +53,7 @@ def get_word_definition(word):
     if not dictionary:
         word_definition['meanings'].append('An error occurred. Wait a few seconds and try again. If the error persists, contact the developer.')
         return word_definition
-    
-    with open('dictionary.json', 'w') as f:
-        f.write(str(dictionary))
-    
+
     try:
         word_definition['word'] = dictionary['word'].capitalize()
     except KeyError:
@@ -106,7 +107,7 @@ def query_result_dictionary(sentence):
     return result
 
 async def inline_query(update: Update, context: CallbackContext) -> None:
-    query = update.inline_query.query.lower()
+    query = update.inline_query.query.capitalize()
 
     # CASES
     # EMPTY
@@ -149,10 +150,42 @@ async def inline_query(update: Update, context: CallbackContext) -> None:
 
     await update.inline_query.answer(results)
 
+def get_quiz(quiz_id):
+    df = pd.read_excel(URL_QUIZ_LIST, sheet_name='quiz', index_col='id')
+    df['correct_option'] = df['correct_option'].fillna(0)
+    df = df.fillna('')
+    
+    df['options'] = df[['option1', 'option2', 'option3', 'option4']].apply(lambda x: x.dropna().tolist(), axis=1)
+    df = df.drop(columns=['option1', 'option2', 'option3', 'option4'])
+    df['correct_option'] = df['correct_option'] - 1
+
+    quiz = df.loc[quiz_id].to_dict()
+    return quiz
+
+async def send_poll(update: Update, context: CallbackContext):
+    param = context.args[0]
+    if not param.isnumeric():
+        return
+    
+    quiz_id = int(param)
+
+    quiz = get_quiz(quiz_id)
+
+    await context.bot.send_poll(
+        chat_id=update.effective_chat.id,
+        type='quiz',
+        question=quiz['question'],
+        options=quiz['options'],
+        correct_option_id=quiz['correct_option'],
+        explanation=quiz['explanation'],
+    )
+
+
 def main() -> None:
     bot = Application.builder().token(TELEGRAM_TOKEN).build()
 
     bot.add_handler(InlineQueryHandler(inline_query))
+    bot.add_handler(CommandHandler('quiz', send_poll))
 
     bot.run_polling()
 
